@@ -4,33 +4,97 @@
   services.flatpak.enable = true;
 
   environment.systemPackages = with pkgs; [
-    cgdb
-    copyq
-    eza
-    fastfetch
-    gcc
-    git
-    gnumake
-    gdb
-    hexyl
+    # Hyprland and Quickshell
+    quickshell
     hyprlock
+    hyprpolkitagent
     hyprshot
     hyprpaper
-    imv
-    kitty
-    mpv
-    neovim
-    obsidian
-    pywal
-    rmpc
     rofi
-    sox
-    taskwarrior2
-    thunar
-    vesktop
     waybar
-    wev
+    kitty
+
+    # Qt support
+    qt6Packages.qtwayland
+    qt6Packages.qt5compat
+
+    # Wallpaper, screenshots and images
+    awww
+    mpvpaper
+    grim
+    slurp
+    gpu-screen-recorder
+    imagemagick
+    matugen
+    imv
+
+    # Clipboard and notifications
+    cliphist
+    wl-clipboard
+    libnotify
+
+    # Networking and Bluetooth tools
+    networkmanagerapplet
+    blueman
+
+    # Audio and media
+    playerctl
+    pavucontrol
+    cava
+    mpv
+    ffmpeg
+    ffmpegthumbnailer
+    sox
+
+    # File manager and utilities
+    thunar
+    thunar-archive-plugin
+    thunar-volman
+    tumbler
+    xed
+    ncdu
+    zenity
     yazi
+
+    # GTK and appearance
+    nwg-look
+    adw-gtk3
+    papirus-icon-theme
+    papirus-folders
+
+    # Monitoring and hardware
+    btop
+    nvtopPackages.amd
+    dmidecode
+    lm_sensors
+    brightnessctl
+    gammastep
+
+    # Terminal and development
+    neovim
+    eza
+    fastfetch
+    starship
+    git
+    gcc
+    gdb
+    cgdb
+    gnumake
+    hexyl
+    jq
+    curl
+    unzip
+
+    # Python
+    python3
+    python3Packages.pygobject3
+
+    # Other applications
+    obsidian
+    vesktop
+    rmpc
+    taskwarrior2
     zed-editor
+    pywal
   ];
 }

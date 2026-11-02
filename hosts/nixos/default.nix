@@ -7,6 +7,7 @@
     ../../modules/system/locale.nix
     ../../modules/system/users.nix
     ../../modules/system/nix.nix
+    ../../modules/system/audio.nix
 
     ../../modules/hardware/graphics.nix
     ../../modules/desktop/hyprland.nix
