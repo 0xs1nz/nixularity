@@ -14,8 +14,9 @@ The desktop is based on the visual design of [43PR's dotfiles](https://github.co
 
 ### Gallery
 
-| Preview 04 | Preview 05 |
+| Gallery | Gallery |
 |:---:|:---:|
+| ![NIXULARITY Preview 2](docs/screenshots/2.png) | ![NIXULARITY Preview 3](docs/screenshots/3.png) |
 | ![NIXULARITY Preview 4](docs/screenshots/4.png) | ![NIXULARITY Preview 5](docs/screenshots/5.png) |
 
 ## Features
