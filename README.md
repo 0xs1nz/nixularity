@@ -10,13 +10,13 @@ The desktop is based on the visual design of [43PR's dotfiles](https://github.co
 
 ### Desktop
 
-![NIXULARITY Desktop](docs/screenshots/desktop.png)
+![NIXULARITY Desktop](docs/screenshots/1.png)
 
 ### Gallery
 
-| Quickshell Settings | Spotify |
+| Preview 04 | Preview 05 |
 |:---:|:---:|
-| ![Settings](docs/screenshots/settings.png) | ![Spotify](docs/screenshots/spotify.png) |
+| ![NIXULARITY Preview 4](docs/screenshots/4.png) | ![NIXULARITY Preview 5](docs/screenshots/5.png) |
 
 ## Features
 
