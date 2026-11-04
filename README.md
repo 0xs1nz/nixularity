@@ -1,4 +1,4 @@
-# Sanz NixOS
+# NIXULARITY
 
 Somehow, this code works. Only God knows how.
 
