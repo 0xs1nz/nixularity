@@ -6,6 +6,18 @@ My personal NixOS configuration, built with Nix Flakes, Home Manager, Hyprland, 
 
 The desktop is based on the visual design of [43PR's dotfiles](https://github.com/43PR/dotfiles), adapted for my NixOS environment.
 
+## Preview
+
+### Desktop
+
+![NIXULARITY Desktop](docs/screenshots/desktop.png)
+
+### Gallery
+
+| Quickshell Settings | Spotify |
+|:---:|:---:|
+| ![Settings](docs/screenshots/settings.png) | ![Spotify](docs/screenshots/spotify.png) |
+
 ## Features
 
 - NixOS 26.05
