@@ -1,0 +1,658 @@
+
+import QtQuick
+import QtQuick.Controls
+import Quickshell.Io
+import "../"
+
+Item {
+    id: page
+    property var drives: []
+    property var filesystems: []
+    property var cleanupInfo: ({journal:0, trash:0, flatpak:0, cliphist:0, thumbs:0})
+    property real marginLeft: 0
+    property real marginRight: 10
+    property real marginTop: 0
+    property real marginBottom: 0
+    property string pendingAction: ""
+    property string pendingTitle: ""
+    property string pendingMessage: ""
+
+    readonly property var sizeUnits: ({
+        B:1, K:1024, KB:1024, KIB:1024,
+        M:1048576, MB:1048576, MIB:1048576,
+        G:1073741824, GB:1073741824, GIB:1073741824,
+        T:1099511627776, TB:1099511627776, TIB:1099511627776
+    })
+
+    function formatBytes(b) {
+        if (!isFinite(b) || b < 0) return "0 B"
+        var u = ["B", "KB", "MB", "GB", "TB"]
+        var i = 0
+        var v = b
+        while (v >= 1024 && i < u.length - 1) {
+            v /= 1024
+            ++i
+        }
+        return (i ? v.toFixed(1) : Math.round(v)) + " " + u[i]
+    }
+
+    function formatCount(n) {
+        var v = Math.round(n) || 0
+        return v + (v === 1 ? " ITEM" : " ITEMS")
+    }
+
+    function parseSize(v) {
+        if (!v) return 0
+        var m = v.trim().match(/^([0-9.]+)\s*([A-Za-z]*)$/)
+        if (!m) return 0
+        var n = parseFloat(m[1])
+        if (isNaN(n)) return 0
+        return n * (m[2] ? (sizeUnits[m[2].toUpperCase()] || 1) : 1)
+    }
+
+    function usageColor(p) {
+        return p >= 90 ? Theme.danger : p >= 75 ? Theme.accent2 : Theme.accent
+    }
+
+    function usageWidth(p) {
+        return Math.min(1, Math.max(0, p / 100))
+    }
+
+    function ignoredMount(m) {
+        return ["/proc", "/sys", "/run", "/dev"].some(function(x) {
+            return m.indexOf(x) === 0
+        })
+    }
+
+    function ignoredFilesystem(f) {
+        return ["tmpfs", "devtmpfs", "overlay"].some(function(x) {
+            return f.indexOf(x) === 0
+        })
+    }
+
+    function parseDfLine(line) {
+        var f = line.trim().split(/\s+/)
+        if (f.length < 6) return null
+
+        var d = {
+            filesystem: f[0],
+            total: parseInt(f[1]),
+            used: parseInt(f[2]),
+            available: parseInt(f[3]),
+            percent: parseInt(f[4]),
+            mount: f.slice(5).join(" ")
+        }
+
+        if ([d.total, d.used, d.available, d.percent].some(isNaN)
+                || ignoredMount(d.mount)
+                || ignoredFilesystem(d.filesystem))
+            return null
+
+        return d
+    }
+
+    function parseDriveData(data) {
+        var disks = []
+        try {
+            var obj = JSON.parse(data)
+            if (!obj.blockdevices) return disks
+
+            for (var i = 0; i < obj.blockdevices.length; ++i) {
+                var d = obj.blockdevices[i]
+                if (d.type === "disk") {
+                    disks.push({
+                        name: d.name || "",
+                        model: (d.model || "").trim(),
+                        size: parseInt(d.size) || 0,
+                        type: d.type || "",
+                        tran: d.tran || ""
+                    })
+                }
+            }
+        } catch (e) {
+            console.log("lsblk JSON error:", e)
+        }
+        return disks
+    }
+
+    function runCommand(c) {
+        commandProcess.command = ["sh", "-c", c]
+        commandProcess.running = true
+    }
+
+    function refreshAll() {
+        pDrives.running = pStorage.running = pCleanup.running = true
+    }
+
+    function confirmAction(t, m, c) {
+        pendingTitle = t
+        pendingMessage = m
+        pendingAction = c
+        confirmPopup.visible = true
+    }
+
+    Process {
+        id: pDrives
+        command: ["sh", "-c", "lsblk -J -b -d -o NAME,MODEL,SIZE,TYPE,TRAN 2>/dev/null"]
+        stdout: StdioCollector {
+            onStreamFinished: page.drives = page.parseDriveData(text)
+        }
+        stderr: StdioCollector {}
+    }
+
+    Process {
+        id: pStorage
+        command: ["sh", "-c", "df -P -B1 2>/dev/null"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var fs = []
+                var lines = text.trim().split("\n")
+
+                for (var i = 0; i < lines.length; ++i) {
+                    var item = page.parseDfLine(lines[i])
+                    if (item) fs.push(item)
+                }
+
+                page.filesystems = fs
+            }
+        }
+        stderr: StdioCollector {}
+    }
+
+    Process {
+        id: pCleanup
+        command: [
+            "sh", "-c",
+            "CACHE_HOME=\"${XDG_CACHE_HOME:-$HOME/.cache}\"; " +
+            "DATA_HOME=\"${XDG_DATA_HOME:-$HOME/.local/share}\"; " +
+            "p() { printf '%s %s\\n' \"$1\" \"${2:-0}\"; }; " +
+            "p JOURNAL \"$(journalctl --disk-usage 2>/dev/null | grep -oE '[0-9.]+ ?[BKMGT]' | tail -1 | tr -d ' ')\"; " +
+            "p TRASH \"$(du -sb \"$DATA_HOME/Trash\" 2>/dev/null | awk '{print $1}')\"; " +
+            "p FLATPAK \"$(command -v flatpak >/dev/null 2>&1 && flatpak uninstall --unused --assumeno 2>/dev/null | grep -oE '[0-9.]+ ?(kB|MB|GB|TB)' | tail -1 | tr -d ' ')\"; " +
+            "p CLIPHIST \"$(command -v cliphist >/dev/null 2>&1 && cliphist list 2>/dev/null | wc -l)\"; " +
+            "p THUMBS \"$(du -sb \"$CACHE_HOME/quickshell/thumbs\" 2>/dev/null | awk '{print $1}')\""
+        ]
+
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var info = {
+                    journal: 0,
+                    trash: 0,
+                    flatpak: 0,
+                    cliphist: 0,
+                    thumbs: 0
+                }
+
+                var lines = text.trim().split("\n")
+                for (var i = 0; i < lines.length; ++i) {
+                    var p = lines[i].trim().split(/\s+/)
+                    var k = p[0] ? p[0].toLowerCase() : ""
+
+                    if (p.length > 1 && info[k] !== undefined)
+                        info[k] = page.parseSize(p.slice(1).join(" "))
+                }
+
+                page.cleanupInfo = info
+            }
+        }
+
+        stderr: StdioCollector {}
+    }
+
+    Process {
+        id: commandProcess
+        stdout: StdioCollector {}
+        stderr: StdioCollector {}
+        onRunningChanged: {
+            if (!running) page.refreshAll()
+        }
+    }
+
+    Rectangle {
+        id: confirmPopup
+        visible: false
+        anchors.centerIn: parent
+        z: 100
+        width: Math.min(parent.width - 30, 420)
+        height: 220
+        radius: Theme.radius
+        color: Theme.bg
+        border.width: 1
+        border.color: Theme.accent
+
+        Column {
+            anchors.fill: parent
+            anchors.margins: 18
+            spacing: 12
+
+            Text {
+                text: page.pendingTitle
+                color: Theme.text
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.textSizeTitle
+                font.bold: true
+            }
+
+            Text {
+                width: parent.width
+                text: page.pendingMessage
+                color: Theme.textDim
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.textSizeGroup
+                wrapMode: Text.WordWrap
+            }
+
+            Item {
+                width: 1
+                height: 1
+            }
+
+            Row {
+                width: parent.width
+                spacing: 10
+
+                ToolButton {
+                    width: (parent.width - 8) / 2
+                    label: "CANCEL"
+                    onClicked: confirmPopup.visible = false
+                }
+
+                ToolButton {
+                    width: (parent.width - 8) / 2
+                    label: "CONFIRM"
+                    accent: true
+                    onClicked: {
+                        confirmPopup.visible = false
+                        page.runCommand(page.pendingAction)
+                    }
+                }
+            }
+        }
+    }
+
+    Timer {
+        interval: 10000
+        running: true
+        repeat: true
+        onTriggered: page.refreshAll()
+    }
+
+    Component.onCompleted: page.refreshAll()
+
+    Column {
+        anchors.fill: parent
+        anchors.leftMargin: page.marginLeft
+        anchors.rightMargin: page.marginRight
+        anchors.topMargin: page.marginTop
+        anchors.bottomMargin: page.marginBottom
+        spacing: 14
+
+        Text {
+            text: "STORAGE"
+            color: Theme.text
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.textSizeTitle
+            font.letterSpacing: 3
+        }
+
+        Rectangle {
+            width: parent.width
+            height: 1
+            color: Theme.border
+        }
+
+        Item {
+            width: parent.width
+            height: parent.height - y
+
+            Flickable {
+                id: flick
+                anchors.fill: parent
+                clip: true
+                contentWidth: width
+                contentHeight: list.height
+                boundsBehavior: Flickable.StopAtBounds
+
+                ScrollBar.vertical: ScrollBar {
+                    id: scrollBar
+
+                    background: Rectangle {
+                        color: Theme.alpha(Theme.border, 0)
+                        radius: width / 2
+                    }
+
+                    contentItem: Rectangle {
+                        color: Theme.accent
+                        radius: width / 2
+                    }
+                }
+
+                Column {
+                    id: list
+                    width: parent.width
+                    spacing: 10
+
+                    Text {
+                        text: "DRIVES"
+                        color: Theme.text
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.textSizeSection
+                        font.bold: true
+                        font.letterSpacing: 2
+                    }
+
+                    Repeater {
+                        model: page.drives
+
+                        delegate: Item {
+                            required property var modelData
+                            width: list.width
+                            height: 42
+
+                            Column {
+                                anchors.fill: parent
+                                spacing: 5
+
+                                Text {
+                                    width: parent.width
+                                    text: modelData.model || modelData.name || "SSD/HDD"
+                                    color: Theme.text
+                                    elide: Text.ElideRight
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Theme.textSizeGroup
+                                    font.bold: true
+                                }
+
+                                Text {
+                                    width: parent.width
+                                    text: modelData.name.toUpperCase() +
+                                        (modelData.tran ? "  •  " + modelData.tran.toUpperCase() : "") +
+                                        "  •  " + page.formatBytes(modelData.size) + " TOTAL"
+                                    color: Theme.textDim
+                                    elide: Text.ElideRight
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Theme.textSizeBody
+                                }
+                            }
+                        }
+                    }
+
+                    Text {
+                        text: "FILESYSTEM"
+                        topPadding: 4
+                        color: Theme.text
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.textSizeSection
+                        font.bold: true
+                        font.letterSpacing: 2
+                    }
+
+                    Repeater {
+                        model: page.filesystems
+
+                        delegate: Item {
+                            required property var modelData
+                            width: list.width
+                            height: 64
+
+                            Column {
+                                anchors.fill: parent
+                                spacing: 9
+
+                                Row {
+                                    width: parent.width
+                                    height: 17
+
+                                    Text {
+                                        width: parent.width - 55
+                                        text: modelData.mount
+                                        color: Theme.text
+                                        elide: Text.ElideRight
+                                        verticalAlignment: Text.AlignVCenter
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: Theme.textSizeGroup
+                                        font.bold: true
+                                    }
+
+                                    Text {
+                                        width: 55
+                                        text: modelData.percent + "%"
+                                        color: page.usageColor(modelData.percent)
+                                        horizontalAlignment: Text.AlignRight
+                                        verticalAlignment: Text.AlignVCenter
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: Theme.textSizeGroup
+                                        font.bold: true
+                                    }
+                                }
+
+                                Rectangle {
+                                    width: parent.width
+                                    height: 4
+                                    radius: 2
+                                    color: Theme.alpha(Theme.textDim, .15)
+
+                                    Rectangle {
+                                        width: parent.width * page.usageWidth(modelData.percent)
+                                        height: parent.height
+                                        radius: 2
+                                        color: page.usageColor(modelData.percent)
+                                        Behavior on width {
+                                            NumberAnimation { duration: Theme.animMed }
+                                        }
+                                    }
+                                }
+
+                                Row {
+                                    width: parent.width
+                                    height: 13
+                                    spacing: 14
+
+                                    Text {
+                                        text: page.formatBytes(modelData.used) + " USED"
+                                        color: Theme.textDim
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: Theme.textSizeBody
+                                    }
+
+                                    Text {
+                                        text: page.formatBytes(modelData.available) + " FREE"
+                                        color: Theme.textDim
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: Theme.textSizeBody
+                                    }
+
+                                    Text {
+                                        text: page.formatBytes(modelData.total) + " TOTAL"
+                                        color: Theme.textDim
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: Theme.textSizeBody
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Text {
+                        text: "CLEANUP"
+                        topPadding: 4
+                        color: Theme.text
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.textSizeSection
+                        font.bold: true
+                        font.letterSpacing: 2
+                    }
+
+                    Repeater {
+                        model: [
+                            {
+                                key: "trash",
+                                label: "TRASH",
+                                action: "EMPTY",
+                                title: "EMPTY TRASH?",
+                                message: "This permanently deletes everything in your XDG Trash directory.",
+                                command: "DATA_HOME=\"${XDG_DATA_HOME:-$HOME/.local/share}\"; if [ -d \"$DATA_HOME/Trash\" ]; then find \"$DATA_HOME/Trash\" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +; fi"
+                            },
+                            {
+                                key: "cliphist",
+                                label: "CLIPHIST",
+                                action: "WIPE",
+                                title: "WIPE CLIPBOARD HISTORY?",
+                                message: "This keeps the 20 most recent clipboard entries and deletes older entries.",
+                                command: "if command -v cliphist >/dev/null 2>&1; then cliphist list | tail -n +21 | cliphist delete; fi"
+                            },
+                            {
+                                key: "thumbs",
+                                label: "WALLPAPER PICKER",
+                                action: "CLEAR",
+                                title: "CLEAR THUMBNAIL CACHE?",
+                                message: "This permanently deletes the Quickshell thumbnail cache.",
+                                command: "CACHE_HOME=\"${XDG_CACHE_HOME:-$HOME/.cache}\"; DIR=\"$CACHE_HOME/quickshell/thumbs\"; if [ -d \"$DIR\" ]; then find \"$DIR\" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +; fi"
+                            },
+                            {
+                                key: "journal",
+                                label: "JOURNAL",
+                                action: "7 DAYS",
+                                title: "VACUUM JOURNAL?",
+                                message: "This permanently deletes system journal logs older than 7 days.",
+                                command: "pkexec journalctl --vacuum-time=7d"
+                            },
+                            {
+                                key: "flatpak",
+                                label: "FLATPAK UNUSED",
+                                action: "CLEAN",
+                                title: "REMOVE UNUSED FLATPAKS?",
+                                message: "This removes unused Flatpak runtimes and packages. Flatpak will ask for confirmation.",
+                                command: "if command -v flatpak >/dev/null 2>&1; then flatpak uninstall --unused; fi"
+                            }
+                        ]
+
+                        delegate: CleanupButton {
+                            required property var modelData
+                            width: list.width
+                            label: modelData.label
+                            value: modelData.key === "cliphist"
+                                ? page.formatCount(page.cleanupInfo.cliphist)
+                                : page.formatBytes(page.cleanupInfo[modelData.key])
+                            actionText: modelData.action
+
+                            onClicked: page.confirmAction(
+                                modelData.title,
+                                modelData.message,
+                                modelData.command
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    component ToolButton: Rectangle {
+        property string label: ""
+        property bool accent: false
+        signal clicked()
+
+        height: 38
+        radius: Theme.radius
+        color: "#00000000"
+        border.width: 1
+        border.color: Theme.border
+
+        Text {
+            anchors.centerIn: parent
+            text: parent.label
+            color: parent.accent ? Theme.accent : Theme.textDim
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.textSizeBody
+            font.bold: true
+            font.letterSpacing: .5
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            hoverEnabled: true
+
+            onEntered: {
+                parent.color = Theme.alpha(Theme.accent, 0.08)
+                parent.border.color = Theme.accent
+            }
+
+            onExited: {
+                parent.color = "#00000000"
+                parent.border.color = Theme.border
+            }
+
+            onClicked: parent.clicked()
+        }
+    }
+
+    component CleanupButton: Rectangle {
+        id: cleanupRoot
+        required property string label
+        required property string value
+        required property string actionText
+        signal clicked()
+
+        width: parent.width
+        height: 42
+        radius: Theme.radius
+        color: "#00000000"
+        border.width: 1
+        border.color: Theme.border
+
+        Text {
+            anchors.left: parent.left
+            anchors.leftMargin: 14
+            anchors.verticalCenter: parent.verticalCenter
+            text: cleanupRoot.label
+            color: Theme.textDim
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.textSizeGroup
+            font.bold: true
+            font.letterSpacing: 2
+        }
+
+        Row {
+            anchors.right: parent.right
+            anchors.rightMargin: 14
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 8
+
+            Text {
+                text: cleanupRoot.value
+                color: Theme.textDim
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.textSizeGroup
+                anchors.verticalCenter: parent.verticalCenter
+            }
+
+            Text {
+                text: cleanupRoot.actionText
+                color: Theme.textDim
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.textSizeGroup
+                font.bold: true
+                font.letterSpacing: 1
+                anchors.verticalCenter: parent.verticalCenter
+            }
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            hoverEnabled: true
+
+            onEntered: {
+                parent.color = Theme.alpha(Theme.accent, 0.08)
+                parent.border.color = Theme.accent
+            }
+
+            onExited: {
+                parent.color = "#00000000"
+                parent.border.color = Theme.border
+            }
+
+            onClicked: cleanupRoot.clicked()
+        }
+    }
+}

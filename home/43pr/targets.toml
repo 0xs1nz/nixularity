@@ -1,0 +1,42 @@
+# Each target: input template -> output file. Optional `reload` is an argv list
+# that runs once after ALL targets were written successfully.
+
+[kitty]
+input  = "${XDG_CONFIG_HOME}/43pr/templates/kitty.conf"
+output = "${XDG_CONFIG_HOME}/kitty/matugen.conf"
+reload = ["pkill", "-USR1", "-x", "kitty"]
+
+[rofi]
+input  = "${XDG_CONFIG_HOME}/43pr/templates/rofi-colors.rasi"
+output = "${XDG_CONFIG_HOME}/rofi/colors.rasi"
+
+[hyprlock]
+input  = "${XDG_CONFIG_HOME}/43pr/templates/hyprlock-colors.conf"
+output = "${XDG_CONFIG_HOME}/hypr/hyprlock-colors.conf"
+
+[gtk3]
+input  = "${XDG_CONFIG_HOME}/43pr/templates/gtk-colors.css"
+output = "${XDG_CONFIG_HOME}/gtk-3.0/colors.css"
+
+[gtk4]
+input  = "${XDG_CONFIG_HOME}/43pr/templates/gtk-colors.css"
+output = "${XDG_CONFIG_HOME}/gtk-4.0/colors.css"
+
+[quickshell]
+input  = "${XDG_CONFIG_HOME}/43pr/templates/quickshell-theme.json"
+output = "${XDG_CACHE_HOME}/43pr/quickshell-theme.json"
+
+[btop]
+input  = "${XDG_CONFIG_HOME}/43pr/templates/btop.theme"
+output = "${XDG_CONFIG_HOME}/btop/themes/43pr.theme"
+reload = ["pkill", "-USR2", "-x", "btop"]
+
+[cava]
+input  = "${XDG_CONFIG_HOME}/43pr/templates/cava-theme"
+output = "${XDG_CONFIG_HOME}/cava/themes/43pr"
+reload = ["pkill", "-USR2", "-f", "-x", "cava"]
+
+[hypr]
+input  = "${XDG_CONFIG_HOME}/43pr/templates/hypr-colors.lua"
+output = "${XDG_CONFIG_HOME}/hypr/colors.lua"
+reload = ["hyprctl", "reload"]

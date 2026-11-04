@@ -8,6 +8,11 @@
       url = "github:nix-community/home-manager/release-26.05";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    spicetify-nix = {
+      url = "github:Gerg-L/spicetify-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs = inputs@{ nixpkgs, home-manager, ... }: {
@@ -21,6 +26,10 @@
         {
           home-manager.useGlobalPkgs = true;
           home-manager.useUserPackages = true;
+
+          home-manager.sharedModules = [
+            inputs.spicetify-nix.homeManagerModules.spicetify
+          ];
 
           home-manager.users.sanz = import ./home/sanz.nix;
         }

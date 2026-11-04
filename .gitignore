@@ -1,4 +1,19 @@
+# Nix build outputs
 result
 result-*
-*.bak
+
+# Development environments
 .direnv/
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+
+# Local backups
+*.bak
+*.before-*
+
+# Local environment secrets
+.env
+.env.*
+!.env.example

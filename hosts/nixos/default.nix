@@ -1,3 +1,4 @@
+{ pkgs, ... }:
 {
   imports = [
     ../../hardware-configuration.nix
@@ -24,5 +25,10 @@
     XDG_DATA_HOME = "$HOME/sys/local/share";
     XDG_STATE_HOME = "$HOME/sys/local/state";
     XDG_DOWNLOAD_DIR = "$HOME/dumps";
-  };
+
+    QML_IMPORT_PATH = "${pkgs.qt6Packages.qt5compat}/lib/qt-6/qml";
+    QML2_IMPORT_PATH = "${pkgs.qt6Packages.qt5compat}/lib/qt-6/qml";
+
+    PR43_GSETTINGS_DATA_DIR = pkgs.glib.getSchemaDataDirPath pkgs.gsettings-desktop-schemas;
+    };
 }

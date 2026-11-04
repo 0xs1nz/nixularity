@@ -1,6 +1,12 @@
 { pkgs, ... }:
 
+
 {
+  fonts.packages = with pkgs; [
+    nerd-fonts.jetbrains-mono
+    roboto-mono
+  ];
+
   services.flatpak.enable = true;
 
   environment.systemPackages = with pkgs; [
@@ -57,6 +63,8 @@
     yazi
 
     # GTK and appearance
+    glib
+    gsettings-desktop-schemas
     nwg-look
     adw-gtk3
     papirus-icon-theme
